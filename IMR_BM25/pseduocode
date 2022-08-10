@@ -1,0 +1,34 @@
+procedure bm25(coll, q, df)
+    bm25s <-- empty dictionary{}
+    avg_dl <-- avg_doc_len(coll) #function Call
+    no_docs <-- coll.get_num_docs() #function Call
+    
+    for all id, doc in coll do
+        query_terms <-- q.split() # method Call
+        qfs <-- Empty dictionary{}
+        
+        for all t in query_terms do
+            term <-- stem(t.lower) # conversion to lower Case
+            Try do
+                qfs[term] <-- qfs[term] + 1
+            except keyError do
+                qfs[term] <-- 1
+                
+        # computing k for bm25
+        k = 1.2 * ((1-0.75)) + 0.75 * (doc.get_doc_len()/ float(avg_dl))
+        
+        bm25_ <-- 0.0
+        for all qt in qfs.keys() do
+            n = 0 # declare 
+            if all qt in df.keys() then
+                n <-- df[qt] # get number of documents
+                f <-- doc.get_term_count(qt) #get term frequency in the document
+                qf <-- qfs[qt]
+                
+                # calculating bm25 using the model equation
+                
+                bm25 <-- bm = math.log(1.0 / ((n + 0.5) / (no_docs - n + 0.5)), 2) * (((1.2 + 1) * f) / (k + f)) * ( 
+                                ((100 + 1) * qf) / float(100 + qf))
+                bm25_ <-- = bm25_ + bm 
+            bm25s[doc.get_docid()] = bm25_ # put result in bm25_dic
+    return bm25s # return result

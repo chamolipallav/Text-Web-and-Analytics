@@ -1,0 +1,253 @@
+              ### Pseudo code for Pseudo relevance model (Model 2)###
+
+# PART A (calculating BM25 score for PR model)
+
+# for calculating average document length
+Function average_document_length(DataCollection):
+    tot_dl <-- 0
+    for id, document in DataCollection.docments().items():
+        total_document_length <-- total_document_length + document.document_length()
+    return total_document_length/document_count
+
+# for calculating the weight of each document based on query
+Function BM25_score(DataCollection, Query, Document_frequency):
+    bm25s <-- empty dictionary
+    average_document_length <-- Function average_document_length
+    documents_count <-- DataCollection.document_count()
+    for id, document in DataCollection.documents().items():
+        query_terms <-- Query.split()
+        query_frequency <-- empty dictionary
+        for t in query_terms:
+            term <-- stem(t.lower())
+            try:
+                query_frequency[term] <-- query_frequency[term] + 1
+            except KeyError:
+                query_frequency[term] <-- 1
+        k <-- 1.2 * ((1 - 0.75) + 0.75 * (document.length() / float(average_document_length)))
+        bm25_ <-- 0.0
+        for query_term in query_frequency.keys():
+            n <-- 0
+            if query_term in Document_frequency.keys():
+                n <-- Document_frequency[query_term]
+                f <-- document.term_count(query_term)
+                qf <-- query_frequency[query_term]
+                bm <-- math.log(1.0 / ((n + 0.5) / (documents_count - n + 0.5)), 2) * (((1.2 + 1) * f) / (k + f)) * (
+                            ((100 + 1) * qf) / float(100 + qf))
+                # bm value may be negative if no_docs < 2n+1, so we may use 3*no_docs to solve this problem.
+                bm25_ <-- bm25_ + bm
+        bm25s[doc.doc_id()] = bm25_
+    return bm25s
+
+
+Function main()
+
+    # import query
+    dataset_doc <-- empty string
+    query <-- empty string
+
+    # extract query and dataset ID from Topic
+    inputText <-- open('Topics.txt', 'read')
+    top <-- 0
+    flag <-- 0
+    for line in inputText.readlines():
+        if flag != 1:
+            if line.startswith("<top>"):
+                query = ""
+                top = 1
+            if line.startswith("<num>"):
+                dataset_document <-- line[15:]
+                dataset_document <-- dataset_document[:3]
+            elif line.startswith("</top>"):
+                flag = 0
+            else:
+                if line.startswith("<title>"):
+                    query <-- line[7:]
+                    flag = 1
+
+        if flag == 1:
+            flag = 0
+            coll_fname <-- "/DataCollection/Dataset" + dataset_doc
+            stopwords_f <-- open('/common-english-words.txt', 'read')
+            stop_words <-- stopwords_f.read().split(',')
+            stopwords_f.close()
+
+            # document parsing
+            collection <-- coll.parse_rcv_coll(coll_fname, stop_words)
+
+            # calculate document frequency
+            data_freq_ <-- data_frequency.calculate_df(collection)
+
+            # call bm25_ to calculate the BM25 score for all the documents in the given Data Collection
+            bm25_1 <-- bm25(collection, query, data_freq_)
+
+            print('For query Q = ' + query)
+
+            # changing directory
+
+            # sorting all the docs according to high - low BM25 score and save the file in .dat format
+            writeFile <-- open('/PRM_BM25_weight/WeightSum_R' + dataset_doc + '.dat', 'append')
+            for (key, value) in sorted(bm25_1.items(), key=lambda x: x[1], reverse=True):
+                writeFile.write(key + ' ' + str(value) + '\n')
+            writeFile.close()
+
+            # creating benchmark file to be used as input while training the model
+            writeFile <-- open("/Ptraining_benchmark/Ptraining_benchmark_" + dataset_document + ".txt", 'append')
+            bm25_threshold = 1.0
+
+            # based on sorted doc - BM25 score doing the information filtering for relevance docs
+            dataFile <-- open('/PRM_BM25_weight/WeightSum_R' + dataset_document + '.dat')
+            file_ <-- dataFile.readlines()
+            for line in file_:
+                line <-- line.strip()
+                lineStr <-- line.split()
+                if float(lineStr[1]) > bm25_threshold:
+                    writeFile.write('R' + dataset_doc + " " + lineStr[0] + ' 1' + '\n')
+                else:
+                    writeFile.write('R' + dataset_doc + " " + lineStr[0] + ' 0' + '\n')
+            writeFile.close()
+            dataFile.close()
+
+# PART B (Training PR model)
+
+# To evaluate the term weight
+Function term_weight(coll, ben, theta):
+    """
+    Input: Data collection, training benchmark file, experimental parameter (Theta)
+    Output: A dictionary of features with their weights
+    """
+    T <-- empty dictionary
+
+    # select T from positive documents and r(tk)
+    for id, document in DataCollection.documents.items():
+        if benchmark[id] > 0:
+            for term, freq in document.terms.items():
+                try:
+                    T[term] <-- T[term] + 1
+                except KeyError:
+                    T[term] = 1
+
+    # calculate n(tk) which is number of terms in a document
+    ntk <-- empty dictionary
+    for id, document in DataCollection.documents().items():
+        for term in document.get_term_list():
+            try:
+                ntk[term] += 1
+            except KeyError:
+                ntk[term] = 1
+
+    # calculate N and R
+    document_count <-- DataCollection.documents_count()
+    Relevant_document <-- 0
+    for id, frequency in benchmark.items():
+        if benchmark[id] > 0:
+            Relevant_document <-- Relevant_document + 1
+
+    for id, rtk in T.items():
+        T[id] <-- ((rtk + 0.5) / (Relevant_document - rtk + 0.5)) / ((ntk[id] - rtk + 0.5) / (documents_count - ntk[id] - R + rtk + 0.5))
+
+    # calculate the mean weight of all the terms.
+    mean_weight <-- 0
+    for id, rtk in T.items():
+        if length(T) != 0:
+            mean_weight <-- mean_weight + rtk
+        else:
+            mean_weight = 0
+        mean_weight <-- mean_weight / len(T)
+
+        mean_weight <-- mean_weight / len(T)
+
+    # Features selection
+    Features = {t: r for t, r in T.items() if r > mean_weight + theta}
+    return Features
+
+
+Function main()
+
+    i = 100
+    while (i < 150):
+        i = i + 1
+        # to access the datasets add your own path
+        # use data collection as an input argument
+        DataCollection <-- "/DataCollection/Dataset" + str(i)
+        stopwords_f <-- open('common-english-words.txt', 'r')
+        stop_words <-- stopwords_f.read().split(',')
+        stopwords_f.close()
+
+        # use document parsing to represent training set
+        coll_ <-- coll.parse_rcv_coll(DataCollection, stop_words)
+
+        os.chdir('..')
+        os.chdir('..')
+
+        # the pesudo relevance judgements
+        benchmarkFile <-- open('/Ptraining_benchmark/Ptraining_benchmark_' + str(i) + '.txt')
+        file_ <-- benchmarkFile.readlines()
+
+        benchmark <-- empty dictionary
+        for line in file_:
+            line <-- line.strip()
+            lineList <-- line.split()
+            benchmark[lineList[1]] <-- float(lineList[2])
+
+        benchmarkFile.close()
+        theta = 3.5
+        bm25_weights <-- w5(coll_, benchmark, theta)
+
+        # add your path for the features
+        writeFile = open('/PRM_BM25_features/PModel_weight_R' + str(i) + '.dat', 'w')
+        for (key, value) in sorted(bm25_weights.items(), key=lambda x: x[1], reverse=True):
+            wFile.write(key + ' ' + str(value) + '\n')
+        wFile.close()
+
+# PART C (Testing PR model)
+
+# To test pseudo relevance model on the same data collection
+
+# Function for calculating BM25 ranking score for all docs in data collection
+def BM25Testing(coll, features):
+    """
+    Input: Collection folder as test set and features calculated in training script
+    Output: Returns a dictionary of document as key and rank as value
+    """
+    ranks <-- empty dictionary
+    for id, document in DataCollection.documents.items():
+        Rank = 0
+        for term in features.keys():
+            if term in document.get_term_list():
+                try:
+                    ranks[id] <-- ranks[id] + features[term]
+                except KeyError:
+                    ranks[id] <-- features[term]
+    return ranks
+
+
+Function main()
+
+    for i in range(101 to 151):
+        # to access the datasets add your own path
+        DataCollection <-- "/DataCollection/Dataset" + str(i)
+        # pre-processing documents
+        stopwords_f <-- open('/Users/pallavchamoli/Downloads/IFN647/Assignment 2 IFN647/assignment deliverable/Assignment_2_Ayush/common-english-words.txt', 'r')
+        stop_words <-- stopwords_f.read().split(',')
+        stopwords_f.close()
+        coll_ <-- coll.parse_rcv_coll(DataCollection, stop_words)
+
+        # get features
+
+        featureFile <-- open('/PRM_BM25_features/PModel_weight_R' + str(i) + '.dat')
+        file_ <-- featureFile.readlines()
+        features <-- empty dictionary
+        for line in file_:
+            line <-- line.strip()
+            lineList <-- line.split()
+            features[lineList[0]] <-- float(lineList[1])
+        featureFile.close()
+
+        # obtain ranks for all documents
+        ranks <-- BM25Testing(coll_, features)
+
+        writeFile <-- open('/PRM_test_result/Test_ranks_PR' + str(i) + '.dat', 'w')
+        for (document, value) in sorted(ranks.items(), key=lambda x: x[1], reverse=True):
+            writeFile.write(document + ' ' + '1' + ' ' + str(value) + '\n')
+        writeFile.close()
+
